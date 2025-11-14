@@ -3802,7 +3802,7 @@ sealed class Event {
 
   // factory Event.fromJson(Map<String, dynamic> json) => _$EventFromJson(json);
   factory Event.fromJson(dynamic json) {
-    final key = json is String ? json : (json as Map).keys.first;
+    final key = (json as Map).keys.first;
     switch (key) {
       case "WorkspacesChanged":
         final value = json["WorkspacesChanged"];

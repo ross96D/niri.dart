@@ -11,7 +11,14 @@ import "models.dart";
 class NiriSocket {
   final Socket socket;
   final _SocketReader _reader;
+  bool _onEventStram = false;
+
   NiriSocket(this.socket) : _reader = _SocketReader(socket);
+
+  void close() {
+    _reader.close();
+    socket.close();
+  }
 
   static Future<NiriSocket> connect() async {
     final path = Platform.environment["NIRI_SOCKET"];
@@ -33,6 +40,10 @@ class NiriSocket {
 
   final _mutex = Mutex();
   Future<Reply<T>> send<T extends Response>(Request request) async {
+    assert(request is! RequestEventStream);
+
+    if (_onEventStram) throw NiriCannotSendCommand();
+
     late final Reply<T> response;
     await _mutex.protect(() async {
       socket.writeln(JsonEncoder().convert(request.toJson()));
@@ -43,6 +54,28 @@ class NiriSocket {
     });
     return response;
   }
+
+  Stream<Event> eventStream() async* {
+    socket.writeln(JsonEncoder().convert(RequestEventStream().toJson()));
+    _onEventStram = true;
+    bool isFirst = true;
+    while (!_reader.done) {
+      final chunk = await _reader.readNext();
+      final lines = chunk.split("\n");
+      if (isFirst) {
+        final first = lines.removeAt(0);
+        final firstReply = Reply.fromJson(json.decode(first));
+        assert(firstReply is ReplyOk && firstReply.response is ResponseHandled);
+      }
+      isFirst = false;
+      for (final line in lines) {
+        if (line.isEmpty) {
+          continue;
+        }
+        yield Event.fromJson(json.decode(line));
+      }
+    }
+  }
 }
 
 class _SocketReader {
@@ -52,6 +85,9 @@ class _SocketReader {
 
   final Set<Completer> _waitNex = {};
 
+  bool _done = false;
+  bool get done => _done;
+
   _SocketReader(this.socket) {
     socket.listen((data) {
       buffer.add(utf8.decode(data));
@@ -59,11 +95,20 @@ class _SocketReader {
         e.complete();
       }
       _waitNex.clear();
+    }, onDone: () => _done = true);
+  }
+
+  void close() {
+    _mutex.protect(() async {
+      _done = true;
     });
   }
 
   final _mutex = Mutex();
   Future<String> readNext() async {
+    if (_done) {
+      throw SocketException("socket is closed");
+    }
     return _mutex.protect(() async {
       final completer = Completer();
       _waitNex.add(completer);

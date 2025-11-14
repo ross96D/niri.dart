@@ -12,6 +12,12 @@ class NiriSocketEnviromentNotFound extends NiriException {
   String get help => "Is niri running?";
 }
 
+class NiriCannotSendCommand extends NiriException {
+  String get message => "Socket cannot be used to send commadns after making an StreamEvent request";
+
+  String get help => "Do not run any other command after calling eventStream function";
+}
+
 class NiriSocketException extends NiriException {
   @override
   String get message => exception.message;
