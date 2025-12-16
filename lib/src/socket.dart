@@ -8,10 +8,39 @@ import "errors.dart";
 
 import "models.dart";
 
+typedef NiriLogginCallback = void Function(String level, String message);
+
+void _loggingNone(String level, String message) {}
+
+enum _Level {
+  error._("ERROR"),
+  // ignore: unused_field
+  warning._("WARNING"),
+  // ignore: unused_field
+  info._("INFO"),
+  // ignore: unused_field
+  debug._("DEBUG");
+
+  final String _value;
+  const _Level._(this._value);
+
+  @override
+  String toString() => _value;
+}
+
 class NiriSocket {
   final Socket socket;
   final _SocketReader _reader;
   bool _onEventStram = false;
+
+  NiriLogginCallback _logger = _loggingNone;
+  set logger(NiriLogginCallback? logger) {
+    if (logger != null) {
+      _logger = logger;
+    } else {
+      _logger = _loggingNone;
+    }
+  }
 
   NiriSocket(this.socket) : _reader = _SocketReader(socket);
 
@@ -72,7 +101,11 @@ class NiriSocket {
         if (line.isEmpty) {
           continue;
         }
-        yield Event.fromJson(json.decode(line));
+        try {
+          yield Event.fromJson(json.decode(line));
+        } catch (e) {
+          _logger("${_Level.error}", "Error decoding event. $e");
+        }
       }
     }
   }
