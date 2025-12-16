@@ -139,9 +139,7 @@ sealed class Request {
       case RequestOverviewState():
         return "OverviewState";
       case RequestAction v:
-        return {
-          "Action": v.action.toJson(),
-        };
+        return {"Action": v.action.toJson()};
       case RequestOutput v:
         return {
           "Output": {"output": v.output, "action": v.action.toJson()},
@@ -3773,6 +3771,13 @@ sealed class Event {
   /// All other windows are no longer focused.
   const factory Event.windowFocusChanged(int? id) = EventWindowFocusChanged;
 
+  /// This event is separate from [Event.windowFocusChanged] because
+  /// the focus timestamp only updates after some debounce time so
+  /// that quick window switching doesn’t mark intermediate windows
+  /// as recently focused.
+  const factory Event.windowFocusTimestampChanged(int id, Timestamp? focusTimestamp) =
+      EventWindowFocusTimestampChanged;
+
   /// Window urgency changed.
   const factory Event.windowUrgencyChanged({required int id, required bool urgent}) =
       EventWindowUrgencyChanged;
@@ -3830,6 +3835,13 @@ sealed class Event {
       case "WindowFocusChanged":
         final value = json["WindowFocusChanged"];
         return Event.windowFocusChanged(value["id"]);
+      case "WindowFocusTimestampChanged":
+        final value = json["WindowFocusTimestampChanged"];
+        final timestamp = value["focus_timestamp"];
+        return Event.windowFocusTimestampChanged(
+          value["id"],
+          timestamp != null ? Timestamp.fromJson(timestamp) : null,
+        );
       case "WorkspaceUrgencyChanged":
         final value = json["WorkspaceUrgencyChanged"];
         return Event.workspaceUrgencyChanged(id: value["id"], urgent: value["urgent"]);
@@ -3951,6 +3963,21 @@ class EventWindowFocusChanged extends Event {
   const EventWindowFocusChanged(this.id);
 }
 
+/// Window focus timestamp changed.
+///
+/// This event is separate from Event::WindowFocusChanged because the focus
+/// timestamp only updates after some debounce time so that quick window switching
+/// doesn’t mark intermediate windows as recently focused.
+class EventWindowFocusTimestampChanged extends Event {
+  /// Id of the window.
+  final int id;
+
+  /// The new focus timestamp.
+  final Timestamp? focusTimestamp;
+
+  const EventWindowFocusTimestampChanged(this.id, this.focusTimestamp);
+}
+
 /// Window urgency changed.
 class EventWindowUrgencyChanged extends Event {
   /// Id of the window.
@@ -4062,4 +4089,19 @@ class ReplyError<T extends Response> extends Reply<T> {
 
 (T, T) _convertRecord<T extends num>(List<dynamic> json) {
   return (json[0], json[1]);
+}
+
+class Timestamp {
+  final int secs;
+  final int nanos;
+
+  const Timestamp({required this.secs, required this.nanos});
+
+  factory Timestamp.fromJson(Map<String, dynamic> json) {
+    return Timestamp(nanos: json["nanos"], secs: json["secs"]);
+  }
+
+  Duration toDartDuration() {
+    return Duration(seconds: secs, microseconds: (nanos / 1000).floor());
+  }
 }
